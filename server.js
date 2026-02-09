@@ -7,15 +7,14 @@ const jwt = require('jsonwebtoken');
 const app = express();
 app.use(express.json());
 
-/* -------------------- DATABASE -------------------- */
+
 const pool = mysql.createPool({
   host: 'localhost',
   user: 'root',
-  password: 'YOUR_DB_PASSWORD',
+  password: '',
   database: 'user_info'
 });
 
-/* -------------------- STEP 6: AUTH MIDDLEWARE -------------------- */
 function authenticate(req, res, next) {
   const header = req.headers.authorization;
 
@@ -34,7 +33,7 @@ function authenticate(req, res, next) {
   }
 }
 
-/* -------------------- STEP 7: RBAC -------------------- */
+
 function authorizeRoles(...roles) {
   return (req, res, next) => {
     if (!roles.includes(req.user.role)) {
@@ -44,7 +43,7 @@ function authorizeRoles(...roles) {
   };
 }
 
-/* -------------------- STEP 8: ABAC (DEPARTMENT) -------------------- */
+
 function departmentOnly(dept) {
   return (req, res, next) => {
     if (req.user.department !== dept) {
@@ -53,8 +52,6 @@ function departmentOnly(dept) {
     next();
   };
 }
-
-/* -------------------- STEP 9: OWNERSHIP -------------------- */
 function ownershipCheck(req, res, next) {
   const requestedId = Number(req.params.id);
 
@@ -69,7 +66,6 @@ function ownershipCheck(req, res, next) {
   next();
 }
 
-/* -------------------- STEP 10: CUSTOM RULES -------------------- */
 function workingHoursOnly(req, res, next) {
   const hour = new Date().getHours();
   if (hour < 8 || hour > 18) {
@@ -78,7 +74,7 @@ function workingHoursOnly(req, res, next) {
   next();
 }
 
-/* -------------------- STEP 4.3: REGISTER -------------------- */
+
 app.post('/register', async (req, res) => {
   const { username, password, role, department } = req.body;
 
@@ -93,7 +89,7 @@ app.post('/register', async (req, res) => {
     );
 
     if (existing.length > 0) {
-      return res.status(409).json({ message: 'Username already exists' });
+      return res.status(409).json({ message: 'User already exists' });
     }
 
     const hashedPassword = await bcrypt.hash(password, 12);
@@ -109,7 +105,7 @@ app.post('/register', async (req, res) => {
   }
 });
 
-/* -------------------- STEP 5: LOGIN (JWT) -------------------- */
+
 app.post('/login', async (req, res) => {
   const { username, password } = req.body;
 
@@ -120,14 +116,14 @@ app.post('/login', async (req, res) => {
     );
 
     if (rows.length === 0) {
-      return res.status(401).json({ message: 'Invalid credentials' });
+      return res.status(401).json({ message: 'Invalid credentials ( invalid username or password )' });
     }
 
     const user = rows[0];
     const valid = await bcrypt.compare(password, user.password);
 
     if (!valid) {
-      return res.status(401).json({ message: 'Invalid credentials' });
+      return res.status(401).json({ message: 'Invalid credentials ( invalid username or password )' });
     }
 
     const token = jwt.sign(
@@ -141,21 +137,21 @@ app.post('/login', async (req, res) => {
     );
 
     res.json({ token });
-  } catch {
-    res.status(500).json({ message: 'Server error' });
-  }
+  }  catch (err) {
+  console.error(err);
+  res.status(500).json({ message: 'Server error' });
+}
+
 });
 
-/* -------------------- PROTECTED EXAMPLES -------------------- */
 
-// Admin only
+
 app.get('/admin', authenticate, authorizeRoles('admin'), (req, res) => {
   res.json({ message: 'Admin access granted' });
 });
 
-// Admin + Manager
-app.get(
-  '/management',
+
+app.get('/management',
   authenticate,
   authorizeRoles('admin', 'manager'),
   (req, res) => {
@@ -163,7 +159,7 @@ app.get(
   }
 );
 
-// Department-based
+
 app.get(
   '/finance',
   authenticate,
@@ -173,9 +169,8 @@ app.get(
   }
 );
 
-// Ownership-based
-app.get(
-  '/users/:id',
+
+app.get('/users/:id',
   authenticate,
   ownershipCheck,
   (req, res) => {
@@ -183,9 +178,8 @@ app.get(
   }
 );
 
-// Combined rules
-app.get(
-  '/secure',
+
+app.get('/secure',
   authenticate,
   authorizeRoles('manager'),
   departmentOnly('IT'),
@@ -195,7 +189,7 @@ app.get(
   }
 );
 
-/* -------------------- SERVER -------------------- */
+
 app.listen(3000, () => {
   console.log('Server running on port 3000');
 });
